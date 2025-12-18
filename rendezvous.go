@@ -1,5 +1,7 @@
 package grendezvous
 
+import "sort"
+
 // Hasher 计算字节切片的hash值.
 type Hasher func(b []byte) uint64
 
@@ -18,16 +20,13 @@ func New(nodes []string, hasher Hasher) *Rendezvous {
 	}
 
 	r := &Rendezvous{
-		nodes:     make([]string, len(nodes)),
+		nodes:     make([]string, 0, len(nodes)),
 		nodeIndex: make(map[string]int, len(nodes)),
-		nodeHash:  make([]uint64, len(nodes)),
+		nodeHash:  make([]uint64, 0, len(nodes)),
 		hasher:    hasher,
 	}
-	for i, node := range nodes {
-		r.nodes[i] = node
-		r.nodeIndex[node] = i
-		// 计算节点的 hash 值
-		r.nodeHash[i] = hasher([]byte(node))
+	for _, node := range nodes {
+		r.Add(node)
 	}
 	return r
 }
@@ -35,30 +34,6 @@ func New(nodes []string, hasher Hasher) *Rendezvous {
 // NewEmpty 创建一个空的 Rendezvous 负载均衡器.
 func NewEmpty(hasher Hasher) *Rendezvous {
 	return New(nil, hasher)
-}
-
-// Lookup 根据 key 查找对应的节点.
-func (r *Rendezvous) Lookup(key []byte) string {
-	// 如果没有节点，返回空字符串
-	if len(r.nodes) == 0 {
-		return ""
-	}
-
-	// 计算 key 的 hash 值
-	keyHash := r.hasher(key)
-
-	// 查找 hash 值最大的节点
-	maxIndex := 0
-	maxHash := xorshiftMult64(keyHash ^ r.nodeHash[0])
-	for i, hash := range r.nodeHash[1:] {
-		hash = xorshiftMult64(keyHash ^ hash)
-		if hash > maxHash {
-			maxHash = hash
-			maxIndex = i + 1
-		}
-	}
-
-	return r.nodes[maxIndex]
 }
 
 // Add 添加一个节点到负载均衡器.
@@ -91,6 +66,55 @@ func (r *Rendezvous) Remove(node string) {
 	r.nodes = r.nodes[:l]
 	r.nodeHash = r.nodeHash[:l]
 	delete(r.nodeIndex, node)
+}
+
+// Lookup 根据 key 查找对应的节点.
+func (r *Rendezvous) Lookup(key []byte) string {
+	// 如果没有节点，返回空字符串
+	if len(r.nodes) == 0 {
+		return ""
+	}
+
+	// 计算 key 的 hash 值
+	keyHash := r.hasher(key)
+
+	// 查找 hash 值最大的节点
+	maxIndex := 0
+	maxHash := xorshiftMult64(keyHash ^ r.nodeHash[0])
+	for i, hash := range r.nodeHash[1:] {
+		hash = xorshiftMult64(keyHash ^ hash)
+		if hash > maxHash {
+			maxHash = hash
+			maxIndex = i + 1
+		}
+	}
+
+	return r.nodes[maxIndex]
+}
+
+// LookupN 根据 key 查找hash只最高的n个节点.
+func (r *Rendezvous) LookupN(key []byte, n int) []string {
+	if n <= 0 || len(r.nodes) == 0 {
+		return nil
+	}
+	if n > len(r.nodes) {
+		n = len(r.nodes)
+	}
+	keyHash := r.hasher(key)
+	idxs := make([]int, len(r.nodes))
+	for i := range idxs {
+		idxs[i] = i
+	}
+	sort.Slice(idxs, func(i, j int) bool {
+		wi := xorshiftMult64(keyHash ^ r.nodeHash[idxs[i]])
+		wj := xorshiftMult64(keyHash ^ r.nodeHash[idxs[j]])
+		return wi > wj
+	})
+	res := make([]string, n)
+	for i := 0; i < n; i++ {
+		res[i] = r.nodes[idxs[i]]
+	}
+	return res
 }
 
 func xorshiftMult64(x uint64) uint64 {

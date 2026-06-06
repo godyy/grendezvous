@@ -41,6 +41,34 @@ func TestRendezvousBalance(t *testing.T) {
 	}
 }
 
+func TestRendezvousAll(t *testing.T) {
+	t.Run("nil when empty", func(t *testing.T) {
+		r := NewEmpty(fnvHasher)
+		if got := r.All(); got != nil {
+			t.Fatalf("All() = %v, want nil", got)
+		}
+	})
+
+	t.Run("returns copy", func(t *testing.T) {
+		r := New([]string{"node-1", "node-2"}, fnvHasher)
+
+		got := r.All()
+		if len(got) != 2 {
+			t.Fatalf("len(All()) = %d, want 2", len(got))
+		}
+		if got[0] != "node-1" || got[1] != "node-2" {
+			t.Fatalf("All() = %v, want [node-1 node-2]", got)
+		}
+
+		got[0] = "changed"
+
+		again := r.All()
+		if again[0] != "node-1" {
+			t.Fatalf("All() exposed internal slice, got %v", again)
+		}
+	})
+}
+
 func BenchmarkRendezvousLookup(b *testing.B) {
 	nodes := make([]string, 64)
 	for i := range nodes {

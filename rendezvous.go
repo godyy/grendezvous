@@ -68,6 +68,17 @@ func (r *Rendezvous) Remove(node string) {
 	delete(r.nodeIndex, node)
 }
 
+// All 返回当前所有节点的副本.
+func (r *Rendezvous) All() []string {
+	if len(r.nodes) == 0 {
+		return nil
+	}
+
+	nodes := make([]string, len(r.nodes))
+	copy(nodes, r.nodes)
+	return nodes
+}
+
 // Lookup 根据 key 查找对应的节点.
 func (r *Rendezvous) Lookup(key []byte) string {
 	// 如果没有节点，返回空字符串
